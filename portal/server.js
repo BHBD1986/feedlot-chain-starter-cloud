@@ -1,71 +1,18 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
-const { ethers } = require("ethers");
-
 const fs = require("fs");
 const path = require("path");
-const LOG_PATH = path.join(__dirname, "audit-log.ndjson");
-
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(express.static("public"));
 
-const RPC_URL = process.env.RPC_URL || "http://127.0.0.1:8545";
-const CONTRACT_ADDRESS = process.env.CONTRACT_ADDRESS;
+const PORT = parseInt(process.env.PORT || "3001", 10);
 
-if (!CONTRACT_ADDRESS) {
-  console.error("Missing CONTRACT_ADDRESS in .env");
-  process.exit(1);
-}
-
-// Minimal ABI: only what we need
-const ABI = [
-  "function logEvent(string tag, string eventType, string payloadJson, bytes32 docHash) external returns (uint256)",
-  "event LedgerEvent(uint256 indexed eventId, string indexed tag, string eventType, uint64 timestamp, address indexed submittedBy, string payloadJson, bytes32 docHash)"
-];
-
-const provider = new ethers.JsonRpcProvider(RPC_URL);
-
-// ---------- Wallet derivation from MNEMONIC ----------
-const mnemonic = process.env.MNEMONIC;
-if (!mnemonic) {
-  console.error("MNEMONIC missing from portal .env");
-  process.exit(1);
-}
-
-function walletAt(index) {
-  const path = `m/44'/60'/0'/0/${index}`;
-  return ethers.HDNodeWallet.fromPhrase(mnemonic, undefined, path).connect(provider);
-}
-
-const roleIndex = {
-  FEEDLOT: Number(process.env.ROLE_INDEX_FEEDLOT || 1),
-  SCALE: Number(process.env.ROLE_INDEX_SCALE || 2),
-  VET: Number(process.env.ROLE_INDEX_VET || 3),
-  NUTRITION: Number(process.env.ROLE_INDEX_NUTRITION || 4),
-  TRUCK: Number(process.env.ROLE_INDEX_TRUCK || 5),
-  PACKER: Number(process.env.ROLE_INDEX_PACKER || 6),
-};
-
-const wallets = {
-  FEEDLOT: walletAt(roleIndex.FEEDLOT),
-  SCALE: walletAt(roleIndex.SCALE),
-  VET: walletAt(roleIndex.VET),
-  NUTRITION: walletAt(roleIndex.NUTRITION),
-  TRUCK: walletAt(roleIndex.TRUCK),
-  PACKER: walletAt(roleIndex.PACKER),
-};
-
-// Debug: verify role addresses match Hardhat accounts #1..#6
-console.log("FEEDLOT:", wallets.FEEDLOT.address);
-console.log("SCALE:", wallets.SCALE.address);
-console.log("VET:", wallets.VET.address);
-console.log("NUTRITION:", wallets.NUTRITION.address);
-console.log("TRUCK:", wallets.TRUCK.address);
-console.log("PACKER:", wallets.PACKER.address);
+// Append-only log (NDJSON)
+const LOG_PATH = path.join(__dirname, "audit-log.ndjson");
 
 // ---------- Policy + PINs ----------
 const allowed = {
@@ -96,30 +43,49 @@ function safeJsonStringify(x) {
   return JSON.stringify(x);
 }
 
+// Read last N events from NDJSON (best-effort; fine for class)
+function readLastEvents(limit = 200) {
+  try {
+    if (!fs.existsSync(LOG_PATH)) return [];
+    const lines = fs.readFileSync(LOG_PATH, "utf8")
+      .split("\n")
+      .filter(Boolean);
+
+    const slice = lines.slice(Math.max(0, lines.length - limit));
+    return slice.map(l => {
+      try { return JSON.parse(l); } catch { return null; }
+    }).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
 // ---------- Routes ----------
 app.get("/api/status", async (_req, res) => {
-  try {
-    const block = await provider.getBlockNumber();
-    res.json({
-      ok: true,
-      rpc: RPC_URL,
-      contract: CONTRACT_ADDRESS,
-      blockNumber: block
-    });
-  } catch (e) {
-    res.status(500).json({ ok: false, error: String(e) });
-  }
+  res.json({
+    ok: true,
+    mode: "NO_BLOCKCHAIN",
+    logPath: "audit-log.ndjson",
+    note: "Render free tier storage is ephemeral; logs can reset on restart."
+  });
 });
 
+// Fetch recent events (viewer can poll this)
+app.get("/api/events", (req, res) => {
+  const limit = Math.min(1000, Math.max(1, parseInt(req.query.limit || "200", 10)));
+  res.json({ ok: true, events: readLastEvents(limit) });
+});
+
+// Submit event (append-only)
 app.post("/api/submit", async (req, res) => {
   try {
     const { role, pin, tag, eventType, payload } = req.body || {};
 
-    if (!role || !wallets[role]) return res.status(400).json({ ok:false, error:"Invalid role" });
+    if (!role || !allowed[role]) return res.status(400).json({ ok:false, error:"Invalid role" });
     if (!tag || typeof tag !== "string") return res.status(400).json({ ok:false, error:"Missing tag" });
     if (!eventType || typeof eventType !== "string") return res.status(400).json({ ok:false, error:"Missing eventType" });
 
-    if (!allowed[role] || !allowed[role].has(eventType)) {
+    if (!allowed[role].has(eventType)) {
       return res.status(403).json({ ok:false, error:`Role ${role} not allowed to submit ${eventType}` });
     }
 
@@ -127,53 +93,38 @@ app.post("/api/submit", async (req, res) => {
       return res.status(401).json({ ok:false, error:"Invalid PIN for selected role" });
     }
 
+    // Require reference for VOIDED/CORRECTED
     const needsRef = /_(VOIDED|CORRECTED)$/.test(eventType);
-if (needsRef) {
-  const ref = payload?.correctsTxHash || payload?.correctsEventId;
-  if (!ref) {
-    return res.status(400).json({ ok:false, error:`${eventType} requires payload.correctsTxHash or payload.correctsEventId` });
-  }
-}
+    if (needsRef) {
+      const ref = payload?.correctsEventId || payload?.correctsTxHash; // keep compatibility with your earlier idea
+      if (!ref) {
+        return res.status(400).json({ ok:false, error:`${eventType} requires payload.correctsEventId (or correctsTxHash)` });
+      }
+    }
 
-    const payloadJson = safeJsonStringify(payload ?? {});
-    const docHash = "0x" + "0".repeat(64);
+    const now = new Date().toISOString();
+    const eventId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
-    const signer = wallets[role];
-    const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+    const record = {
+      at: now,
+      eventId,
+      role,
+      tag,
+      eventType,
+      payload: payload ?? {},
+      payloadJson: safeJsonStringify(payload ?? {}),
+      submittedBy: role, // no wallets in this mode
+      mode: "NO_BLOCKCHAIN"
+    };
 
-    const tx = await contract.logEvent(tag, eventType, payloadJson, docHash);
-    const receipt = await tx.wait();
+    fs.appendFileSync(LOG_PATH, JSON.stringify(record) + "\n", "utf8");
 
-    fs.appendFileSync(
-  LOG_PATH,
-  JSON.stringify({
-    at: new Date().toISOString(),
-    role,
-    tag,
-    eventType,
-    payload,
-    txHash: tx.hash,
-    blockNumber: receipt.blockNumber,
-    submittedBy: await signer.getAddress(),
-    contract: CONTRACT_ADDRESS
-  }) + "\n",
-  "utf8"
-);
-
-
-    res.json({
-      ok: true,
-      txHash: tx.hash,
-      blockNumber: receipt.blockNumber,
-      submittedBy: await signer.getAddress()
-    });
+    res.json({ ok: true, eventId });
   } catch (e) {
     res.status(500).json({ ok:false, error: String(e) });
   }
 });
 
-const PORT = parseInt(process.env.PORT || "3001", 10);
-
 app.listen(PORT, "0.0.0.0", () => {
-  console.log(`Portal running on port ${PORT}`);
+  console.log(`Portal running on port ${PORT} (NO_BLOCKCHAIN)`);
 });
