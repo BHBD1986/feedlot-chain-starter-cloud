@@ -138,31 +138,30 @@
 /* ======================
    CONFIG
 ====================== */
-const DEFAULT_API_BASE = "https://feedlot-chain-starter-cloud-1.onrender.com"; // leave blank; you will set after Render deploy
-let autoTimer = null;
+/* ===== CONFIG (LOCKED FOR CLASS) ===== */
+const API_BASE = "https://feedlot-chain-starter-cloud-1.onrender.com";
 
 function getApiBase() {
-  return (document.getElementById("apiBase").value || "").trim().replace(/\/+$/, "");
+  return API_BASE;
 }
 
 function saveApiBase() {
-  const v = getApiBase();
-  if (!v) { alert("Enter your Render portal URL first."); return; }
-  localStorage.setItem("FEEDLOT_API_BASE", v);
-  alert("Saved API base.");
+  alert("API base is locked for class.");
 }
 
 function loadApiBaseFromStorage() {
-  const saved = localStorage.getItem("FEEDLOT_API_BASE") || DEFAULT_API_BASE;
-  document.getElementById("apiBase").value = saved;
+  const el = document.getElementById("apiBase");
+  if (el) el.value = API_BASE;
 }
 loadApiBaseFromStorage();
+
 
 /* ======================
    STATUS
 ====================== */
 async function checkStatus() {
-  const base = getApiBase();
+const base = getApiBase();
+const res = await fetch(`${base}/api/status`, { cache: "no-store" });
   const out = document.getElementById("statusOut");
   out.textContent = "Checking...";
   out.className = "small muted";
