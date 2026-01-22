@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Feedlot Ledger Viewer</title>
+  <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    input, button { padding: 6px; margin: 4px; }
+    table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+    th, td { border: 1px solid #ccc; padding: 6px; }
+    th { background: #eee; }
+    pre { margin: 0; }
+  </style>
+</head>
+<body>
+
+<h2>Feedlot Ledger – Event Viewer</h2>
+
+<div>
+  <label>RPC URL:</label>
+  <input id="rpc" size="40" value="http://127.0.0.1:8545" />
+</div>
+
+<div>
+  <label>Contract Address:</label>
+  <input id="contract" size="44" placeholder="0x..." />
+</div>
+
+<div>
+  <label>CCIA Tag:</label>
+  <input id="tag" size="24" />
+  <button onclick="loadEvents()">Load Events</button>
+  <button onclick="loadAll()">Load ALL (debug)</button>
+
+</div>
+
+<table id="events">
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Event Type</th>
+      <th>Timestamp</th>
+      <th>Submitted By</th>
+      <th>Payload</th>
+    </tr>
+  </thead>
+  <tbody></tbody>
+</table>
+
+<script>
+const abi = [
+  "event LedgerEvent(uint256 indexed eventId, string indexed tag, string eventType, uint64 timestamp, address indexed submittedBy, string payloadJson, bytes32 docHash)"
+];
+
+async function loadEvents() {
+  const rpc = document.getElementById("rpc").value;
+  const addr = document.getElementById("contract").value;
+  const tag = document.getElementById("tag").value;
+
+  const provider = new ethers.JsonRpcProvider(rpc);
+  const contract = new ethers.Contract(addr, abi, provider);
+
+  const filter = contract.filters.LedgerEvent(null, tag);
+  const logs = await contract.queryFilter(filter, 0, "latest");
+
+  const tbody = document.querySelector("#events tbody");
+  tbody.innerHTML = "";
+
+  for (const l of logs) {
+    const e = l.args;
+    const tr = document.createElement("tr");
+
+    tr.innerHTML = `
+      <td>${e.eventId}</td>
+      <td>${e.eventType}</td>
+      <td>${new Date(Number(e.timestamp) * 1000).toLocaleString()}</td>
+      <td>${e.submittedBy}</td>
+      <td><pre>${e.payloadJson}</pre></td>
+    `;
+
+    tbody.appendChild(tr);
+  }
+}
+async function loadAll() {
+  const rpc = document.getElementById("rpc").value;
+  const addr = document.getElementById("contract").value;
+
+  const provider = new ethers.JsonRpcProvider(rpc);
+  const contract = new ethers.Contract(addr, abi, provider);
+
+  const logs = await contract.queryFilter(contract.filters.LedgerEvent(), 0, "latest");
+
+  const tbody = document.querySelector("#events tbody");
+  tbody.innerHTML = "";
+
+  for (const l of logs) {
+    const e = l.args;
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${e.eventId}</td>
+      <td>${e.eventType}</td>
+      <td>${new Date(Number(e.timestamp) * 1000).toLocaleString()}</td>
+      <td>${e.submittedBy}</td>
+      <td><pre>${e.payloadJson}</pre></td>
+    `;
+    tbody.appendChild(tr);
+  }
+}
+
+</script>
+
+</body>
+</html>
