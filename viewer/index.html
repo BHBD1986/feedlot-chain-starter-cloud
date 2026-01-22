@@ -2,9 +2,9 @@
 <html>
 <head>
   <meta charset="UTF-8" />
-  <title>Feedlot Ledger Viewer (No Blockchain)</title>
+  <title>Feedlot Ledger Viewer</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 20px; max-width: 1100px; }
+    body { font-family: Arial, sans-serif; margin: 20px; max-width: 1200px; }
     input, select, button { padding: 6px; margin: 4px; }
     .row { display:flex; flex-wrap:wrap; gap:12px; align-items:center; }
     .box { border: 1px solid #ddd; padding: 12px; border-radius: 10px; margin: 12px 0; }
@@ -29,8 +29,8 @@
 </head>
 <body>
 
-<h2>Feedlot Ledger – Event Viewer (Classroom Mode)</h2>
-<div class="muted">Source: Portal API (append-only NDJSON). No blockchain/RPC required.</div>
+<h2>Feedlot Ledger – Event Viewer</h2>
+<div class="muted">Source: cloud ledger (append-only log) with a simulated block chain (hash-linked records).</div>
 
 <div class="box">
   <div class="row">
@@ -62,7 +62,7 @@
   </div>
 
   <div class="small muted">
-    Tip: This runs great in locked-down school networks because browsers only make outbound HTTPS requests.
+    Tip: Works in locked-down networks because clients only make outbound HTTPS requests.
   </div>
 </div>
 
@@ -104,7 +104,7 @@
   </div>
 
   <div class="small muted">
-    Note: For WEIGH_CORRECTED you should include a payload with the corrected value (see below).
+    Note: For WEIGH_CORRECTED include a payload with the corrected value.
   </div>
 
   <div class="row">
@@ -122,7 +122,10 @@
 <table id="events">
   <thead>
     <tr>
-      <th style="width:180px;">ID</th>
+      <th style="width:80px;">Block #</th>
+      <th style="width:160px;">Block Hash</th>
+      <th style="width:160px;">Prev Hash</th>
+      <th style="width:180px;">Event ID</th>
       <th style="width:160px;">Type</th>
       <th style="width:190px;">Timestamp</th>
       <th style="width:110px;">Role</th>
@@ -136,32 +139,34 @@
 
 <script>
 /* ======================
-   CONFIG
+   CONFIG (LOCKED FOR CLASS)
 ====================== */
-/* ===== CONFIG (LOCKED FOR CLASS) ===== */
 const API_BASE = "https://feedlot-chain-starter-cloud-1.onrender.com";
+let autoTimer = null;
 
 function getApiBase() {
   return API_BASE;
 }
-
 function saveApiBase() {
   alert("API base is locked for class.");
 }
-
 function loadApiBaseFromStorage() {
   const el = document.getElementById("apiBase");
   if (el) el.value = API_BASE;
 }
 loadApiBaseFromStorage();
 
-
 /* ======================
    STATUS
 ====================== */
+function shortHash(h) {
+  if (!h) return "";
+  const s = String(h);
+  return s.length <= 12 ? s : (s.slice(0, 10) + "…");
+}
+
 async function checkStatus() {
-const base = getApiBase();
-const res = await fetch(`${base}/api/status`, { cache: "no-store" });
+  const base = getApiBase();
   const out = document.getElementById("statusOut");
   out.textContent = "Checking...";
   out.className = "small muted";
@@ -171,10 +176,18 @@ const res = await fetch(`${base}/api/status`, { cache: "no-store" });
     const data = await res.json();
     if (!data.ok) throw new Error(data.error || "status not ok");
 
-    out.textContent = `OK (${data.mode || "unknown"})`;
+    const mode = data.mode || "unknown";
+    const latest = data.latestBlock ?? data.blockNumber ?? "";
+    const tip = data.tipHash ? shortHash(data.tipHash) : "";
+
+    const extra = (latest !== "" || tip !== "")
+      ? ` | Latest block: ${latest}${tip ? " | Tip: " + tip : ""}`
+      : "";
+
+    out.textContent = `OK (${mode})${extra}`;
     out.className = "small ok";
   } catch (e) {
-    out.textContent = `ERROR: ${String(e).slice(0,120)}`;
+    out.textContent = `ERROR: ${String(e).slice(0,160)}`;
     out.className = "small warn";
   }
 }
@@ -236,7 +249,14 @@ function render(events, tagFilter) {
     const payloadPretty = JSON.stringify(e.payload ?? {}, null, 2);
     const submittedBy = e.submittedBy ?? e.role ?? "";
 
+    const bnum = e.blockNumber ?? "";
+    const bh = e.blockHash ?? "";
+    const ph = e.prevHash ?? "";
+
     tr.innerHTML = `
+      <td class="mono small">${escapeHtml(bnum)}</td>
+      <td class="mono small" title="${escapeHtml(bh)}">${escapeHtml(shortHash(bh))}</td>
+      <td class="mono small" title="${escapeHtml(ph)}">${escapeHtml(shortHash(ph))}</td>
       <td class="mono small">${escapeHtml(e.eventId || "")}</td>
       <td>${pillForType(e.eventType)}</td>
       <td class="small">${escapeHtml(new Date(e.at || Date.now()).toLocaleString())}</td>
@@ -260,7 +280,6 @@ function copyEventId(id) {
 function useAsCorrection(id, tag) {
   document.getElementById("correctsId").value = id || "";
   if (tag) document.getElementById("corrTag").value = tag;
-  // scroll to correction box
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -284,6 +303,7 @@ function toggleAuto() {
   if (enabled) {
     autoTimer = setInterval(() => {
       loadEvents().catch(() => {});
+      checkStatus().catch(() => {});
     }, 10000);
   }
 }
@@ -303,7 +323,6 @@ async function submitCorrection() {
   const eventType = document.getElementById("corrType").value.trim();
   const correctsEventId = document.getElementById("correctsId").value.trim();
 
-  if (!base) { out.textContent = "Missing API base."; out.className="small warn"; return; }
   if (!role || !pin) { out.textContent = "Missing role or PIN."; out.className="small warn"; return; }
   if (!tag) { out.textContent = "Missing tag."; out.className="small warn"; return; }
   if (!eventType) { out.textContent = "Missing eventType."; out.className="small warn"; return; }
@@ -312,13 +331,12 @@ async function submitCorrection() {
   let payload = {};
   try {
     payload = JSON.parse(document.getElementById("payloadJson").value || "{}");
-  } catch (e) {
+  } catch {
     out.textContent = "Payload JSON is invalid.";
     out.className = "small warn";
     return;
   }
 
-  // enforce reference
   payload.correctsEventId = correctsEventId;
 
   try {
@@ -330,16 +348,18 @@ async function submitCorrection() {
     const data = await res.json();
     if (!data.ok) throw new Error(data.error || "submit failed");
 
-    out.textContent = `OK: created eventId ${data.eventId}`;
+    const extra = data.blockNumber ? ` (block ${data.blockNumber})` : "";
+    out.textContent = `OK: created eventId ${data.eventId}${extra}`;
     out.className = "small ok";
     await loadEvents();
+    await checkStatus();
   } catch (e) {
     out.textContent = `ERROR: ${String(e).slice(0,200)}`;
     out.className = "small warn";
   }
 }
 
-/* Auto status check on load (optional) */
+/* Auto status check on load */
 checkStatus().catch(() => {});
 </script>
 
