@@ -2,112 +2,346 @@
 <html>
 <head>
   <meta charset="UTF-8" />
-  <title>Feedlot Ledger Viewer</title>
-  <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
+  <title>Feedlot Ledger Viewer (No Blockchain)</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 20px; }
-    input, button { padding: 6px; margin: 4px; }
-    table { border-collapse: collapse; width: 100%; margin-top: 20px; }
-    th, td { border: 1px solid #ccc; padding: 6px; }
+    body { font-family: Arial, sans-serif; margin: 20px; max-width: 1100px; }
+    input, select, button { padding: 6px; margin: 4px; }
+    .row { display:flex; flex-wrap:wrap; gap:12px; align-items:center; }
+    .box { border: 1px solid #ddd; padding: 12px; border-radius: 10px; margin: 12px 0; }
+    table { border-collapse: collapse; width: 100%; margin-top: 12px; }
+    th, td { border: 1px solid #ccc; padding: 6px; vertical-align: top; }
     th { background: #eee; }
-    pre { margin: 0; }
+    pre { margin: 0; white-space: pre-wrap; word-break: break-word; }
+    .muted { color:#666; }
+    .pill { display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; border:1px solid #ddd; background:#fafafa; }
+    .pill.bad { border-color:#f1c7c7; background:#fff5f5; }
+    .pill.good { border-color:#c7f1d3; background:#f3fff6; }
+    .warn { color:#a33; font-weight:600; }
+    .ok { color:#2a7; font-weight:600; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+    .small { font-size: 12px; }
+    .right { margin-left:auto; }
+    .btn { cursor:pointer; }
+    .btn:disabled { opacity:0.6; cursor:not-allowed; }
+    .rowline { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    .hl { background:#fffef0; }
   </style>
 </head>
 <body>
 
-<h2>Feedlot Ledger – Event Viewer</h2>
+<h2>Feedlot Ledger – Event Viewer (Classroom Mode)</h2>
+<div class="muted">Source: Portal API (append-only NDJSON). No blockchain/RPC required.</div>
 
-<div>
-  <label>RPC URL:</label>
-  <input id="rpc" size="40" value="http://127.0.0.1:8545" />
+<div class="box">
+  <div class="row">
+    <div class="rowline">
+      <label><b>Portal API Base:</b></label>
+      <input id="apiBase" size="48" />
+      <button class="btn" onclick="saveApiBase()">Save</button>
+    </div>
+
+    <div class="rowline right">
+      <button class="btn" onclick="checkStatus()">Check Status</button>
+      <span id="statusOut" class="small muted"></span>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="rowline">
+      <label><b>CCIA Tag filter:</b></label>
+      <input id="tag" size="26" placeholder="Optional, e.g., 124000123456789" />
+      <button class="btn" onclick="loadEvents()">Load Events</button>
+      <button class="btn" onclick="loadAll()">Load ALL</button>
+    </div>
+
+    <div class="rowline right">
+      <label class="small"><input type="checkbox" id="auto" onchange="toggleAuto()"> Auto-refresh (10s)</label>
+      <label class="small">Limit:</label>
+      <input id="limit" size="6" value="300" />
+    </div>
+  </div>
+
+  <div class="small muted">
+    Tip: This runs great in locked-down school networks because browsers only make outbound HTTPS requests.
+  </div>
 </div>
 
-<div>
-  <label>Contract Address:</label>
-  <input id="contract" size="44" placeholder="0x..." />
-</div>
+<div class="box">
+  <div class="row">
+    <div>
+      <b>Quick correction/void (optional)</b>
+      <div class="muted small">Creates a new event that references an earlier eventId. It does not edit history.</div>
+    </div>
+  </div>
 
-<div>
-  <label>CCIA Tag:</label>
-  <input id="tag" size="24" />
-  <button onclick="loadEvents()">Load Events</button>
-  <button onclick="loadAll()">Load ALL (debug)</button>
+  <div class="row">
+    <div class="rowline">
+      <label class="small"><b>Role</b></label>
+      <select id="role">
+        <option value="SCALE">SCALE</option>
+        <option value="VET">VET</option>
+      </select>
 
+      <label class="small"><b>PIN</b></label>
+      <input id="pin" type="password" size="10" placeholder="PIN" />
+
+      <label class="small"><b>Tag</b></label>
+      <input id="corrTag" size="18" placeholder="same CCIA tag" />
+
+      <label class="small"><b>Type</b></label>
+      <select id="corrType">
+        <option value="WEIGH_VOIDED">WEIGH_VOIDED</option>
+        <option value="WEIGH_CORRECTED">WEIGH_CORRECTED</option>
+        <option value="TREATMENT_VOIDED">TREATMENT_VOIDED</option>
+      </select>
+
+      <label class="small"><b>Corrects eventId</b></label>
+      <input id="correctsId" class="mono" size="22" placeholder="Paste eventId" />
+
+      <button class="btn" onclick="submitCorrection()">Submit</button>
+      <span id="submitOut" class="small muted"></span>
+    </div>
+  </div>
+
+  <div class="small muted">
+    Note: For WEIGH_CORRECTED you should include a payload with the corrected value (see below).
+  </div>
+
+  <div class="row">
+    <div style="flex:1;">
+      <label class="small"><b>Payload JSON</b> (optional; for CORRECTED include new value)</label>
+      <textarea id="payloadJson" style="width:100%; height:90px;" class="mono">{
+  "field": "entryWeightKg",
+  "newValue": 672,
+  "reason": "Keying error"
+}</textarea>
+    </div>
+  </div>
 </div>
 
 <table id="events">
   <thead>
     <tr>
-      <th>ID</th>
-      <th>Event Type</th>
-      <th>Timestamp</th>
-      <th>Submitted By</th>
+      <th style="width:180px;">ID</th>
+      <th style="width:160px;">Type</th>
+      <th style="width:190px;">Timestamp</th>
+      <th style="width:110px;">Role</th>
+      <th style="width:110px;">Submitted By</th>
       <th>Payload</th>
+      <th style="width:140px;">Actions</th>
     </tr>
   </thead>
   <tbody></tbody>
 </table>
 
 <script>
-const abi = [
-  "event LedgerEvent(uint256 indexed eventId, string indexed tag, string eventType, uint64 timestamp, address indexed submittedBy, string payloadJson, bytes32 docHash)"
-];
+/* ======================
+   CONFIG
+====================== */
+const DEFAULT_API_BASE = ""; // leave blank; you will set after Render deploy
+let autoTimer = null;
+
+function getApiBase() {
+  return (document.getElementById("apiBase").value || "").trim().replace(/\/+$/, "");
+}
+
+function saveApiBase() {
+  const v = getApiBase();
+  if (!v) { alert("Enter your Render portal URL first."); return; }
+  localStorage.setItem("FEEDLOT_API_BASE", v);
+  alert("Saved API base.");
+}
+
+function loadApiBaseFromStorage() {
+  const saved = localStorage.getItem("FEEDLOT_API_BASE") || DEFAULT_API_BASE;
+  document.getElementById("apiBase").value = saved;
+}
+loadApiBaseFromStorage();
+
+/* ======================
+   STATUS
+====================== */
+async function checkStatus() {
+  const base = getApiBase();
+  const out = document.getElementById("statusOut");
+  out.textContent = "Checking...";
+  out.className = "small muted";
+
+  try {
+    const res = await fetch(`${base}/api/status`, { cache: "no-store" });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || "status not ok");
+
+    out.textContent = `OK (${data.mode || "unknown"})`;
+    out.className = "small ok";
+  } catch (e) {
+    out.textContent = `ERROR: ${String(e).slice(0,120)}`;
+    out.className = "small warn";
+  }
+}
+
+/* ======================
+   LOAD EVENTS
+====================== */
+function parseLimit() {
+  const raw = (document.getElementById("limit").value || "300").trim();
+  const n = parseInt(raw, 10);
+  if (!Number.isFinite(n) || n <= 0) return 300;
+  return Math.min(1000, n);
+}
+
+async function fetchEvents() {
+  const base = getApiBase();
+  const limit = parseLimit();
+  const res = await fetch(`${base}/api/events?limit=${limit}`, { cache: "no-store" });
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.error || "Failed to fetch events");
+  return data.events || [];
+}
+
+function looksVoidedOrCorrected(type) {
+  return /_(VOIDED|CORRECTED)$/.test(type || "");
+}
+
+function pillForType(type) {
+  const cls = looksVoidedOrCorrected(type) ? "pill bad" : "pill good";
+  return `<span class="${cls}">${escapeHtml(type || "")}</span>`;
+}
+
+function escapeHtml(s) {
+  return String(s || "")
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
+}
+
+function copyText(t) {
+  navigator.clipboard.writeText(t).catch(() => {});
+}
+
+function render(events, tagFilter) {
+  const tbody = document.querySelector("#events tbody");
+  tbody.innerHTML = "";
+
+  // newest last tends to be easier to read as a timeline
+  const list = [...events].reverse();
+
+  for (const e of list) {
+    if (tagFilter && e.tag !== tagFilter) continue;
+
+    const tr = document.createElement("tr");
+    if (looksVoidedOrCorrected(e.eventType)) tr.classList.add("hl");
+
+    const payloadPretty = JSON.stringify(e.payload ?? {}, null, 2);
+    const submittedBy = e.submittedBy ?? e.role ?? "";
+
+    tr.innerHTML = `
+      <td class="mono small">${escapeHtml(e.eventId || "")}</td>
+      <td>${pillForType(e.eventType)}</td>
+      <td class="small">${escapeHtml(new Date(e.at || Date.now()).toLocaleString())}</td>
+      <td class="small">${escapeHtml(e.role || "")}</td>
+      <td class="small">${escapeHtml(submittedBy)}</td>
+      <td><pre class="small">${escapeHtml(payloadPretty)}</pre></td>
+      <td class="small">
+        <button class="btn" onclick="copyEventId('${escapeHtml(e.eventId || "")}')">Copy ID</button>
+        <button class="btn" onclick="useAsCorrection('${escapeHtml(e.eventId || "")}','${escapeHtml(e.tag || "")}')">Use as ref</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  }
+}
+
+function copyEventId(id) {
+  if (!id) return;
+  copyText(id);
+}
+
+function useAsCorrection(id, tag) {
+  document.getElementById("correctsId").value = id || "";
+  if (tag) document.getElementById("corrTag").value = tag;
+  // scroll to correction box
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
 
 async function loadEvents() {
-  const rpc = document.getElementById("rpc").value;
-  const addr = document.getElementById("contract").value;
-  const tag = document.getElementById("tag").value;
-
-  const provider = new ethers.JsonRpcProvider(rpc);
-  const contract = new ethers.Contract(addr, abi, provider);
-
-  const filter = contract.filters.LedgerEvent(null, tag);
-  const logs = await contract.queryFilter(filter, 0, "latest");
-
-  const tbody = document.querySelector("#events tbody");
-  tbody.innerHTML = "";
-
-  for (const l of logs) {
-    const e = l.args;
-    const tr = document.createElement("tr");
-
-    tr.innerHTML = `
-      <td>${e.eventId}</td>
-      <td>${e.eventType}</td>
-      <td>${new Date(Number(e.timestamp) * 1000).toLocaleString()}</td>
-      <td>${e.submittedBy}</td>
-      <td><pre>${e.payloadJson}</pre></td>
-    `;
-
-    tbody.appendChild(tr);
-  }
+  const tag = document.getElementById("tag").value.trim();
+  const events = await fetchEvents();
+  render(events, tag);
 }
+
 async function loadAll() {
-  const rpc = document.getElementById("rpc").value;
-  const addr = document.getElementById("contract").value;
+  document.getElementById("tag").value = "";
+  await loadEvents();
+}
 
-  const provider = new ethers.JsonRpcProvider(rpc);
-  const contract = new ethers.Contract(addr, abi, provider);
-
-  const logs = await contract.queryFilter(contract.filters.LedgerEvent(), 0, "latest");
-
-  const tbody = document.querySelector("#events tbody");
-  tbody.innerHTML = "";
-
-  for (const l of logs) {
-    const e = l.args;
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${e.eventId}</td>
-      <td>${e.eventType}</td>
-      <td>${new Date(Number(e.timestamp) * 1000).toLocaleString()}</td>
-      <td>${e.submittedBy}</td>
-      <td><pre>${e.payloadJson}</pre></td>
-    `;
-    tbody.appendChild(tr);
+/* ======================
+   AUTO REFRESH
+====================== */
+function toggleAuto() {
+  const enabled = document.getElementById("auto").checked;
+  if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+  if (enabled) {
+    autoTimer = setInterval(() => {
+      loadEvents().catch(() => {});
+    }, 10000);
   }
 }
 
+/* ======================
+   SUBMIT CORRECTION (OPTIONAL)
+====================== */
+async function submitCorrection() {
+  const base = getApiBase();
+  const out = document.getElementById("submitOut");
+  out.textContent = "Submitting...";
+  out.className = "small muted";
+
+  const role = document.getElementById("role").value.trim();
+  const pin = document.getElementById("pin").value.trim();
+  const tag = document.getElementById("corrTag").value.trim();
+  const eventType = document.getElementById("corrType").value.trim();
+  const correctsEventId = document.getElementById("correctsId").value.trim();
+
+  if (!base) { out.textContent = "Missing API base."; out.className="small warn"; return; }
+  if (!role || !pin) { out.textContent = "Missing role or PIN."; out.className="small warn"; return; }
+  if (!tag) { out.textContent = "Missing tag."; out.className="small warn"; return; }
+  if (!eventType) { out.textContent = "Missing eventType."; out.className="small warn"; return; }
+  if (!correctsEventId) { out.textContent = "Missing corrects eventId."; out.className="small warn"; return; }
+
+  let payload = {};
+  try {
+    payload = JSON.parse(document.getElementById("payloadJson").value || "{}");
+  } catch (e) {
+    out.textContent = "Payload JSON is invalid.";
+    out.className = "small warn";
+    return;
+  }
+
+  // enforce reference
+  payload.correctsEventId = correctsEventId;
+
+  try {
+    const res = await fetch(`${base}/api/submit`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role, pin, tag, eventType, payload })
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || "submit failed");
+
+    out.textContent = `OK: created eventId ${data.eventId}`;
+    out.className = "small ok";
+    await loadEvents();
+  } catch (e) {
+    out.textContent = `ERROR: ${String(e).slice(0,200)}`;
+    out.className = "small warn";
+  }
+}
+
+/* Auto status check on load (optional) */
+checkStatus().catch(() => {});
 </script>
 
 </body>
