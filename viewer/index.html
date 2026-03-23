@@ -4,13 +4,13 @@
   <meta charset="UTF-8" />
   <title>Feedlot Ledger Viewer</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 20px; max-width: 1200px; }
+    body { font-family: Arial, sans-serif; margin: 20px; max-width: 1400px; }
     input, select, button { padding: 6px; margin: 4px; }
     .row { display:flex; flex-wrap:wrap; gap:12px; align-items:center; }
     .box { border: 1px solid #ddd; padding: 12px; border-radius: 10px; margin: 12px 0; }
     table { border-collapse: collapse; width: 100%; margin-top: 12px; }
     th, td { border: 1px solid #ccc; padding: 6px; vertical-align: top; }
-    th { background: #eee; }
+    th { background: #eee; text-align: left; font-size: 13px; }
     pre { margin: 0; white-space: pre-wrap; word-break: break-word; }
     .muted { color:#666; }
     .pill { display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; border:1px solid #ddd; background:#fafafa; }
@@ -25,6 +25,8 @@
     .btn:disabled { opacity:0.6; cursor:not-allowed; }
     .rowline { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
     .hl { background:#fffef0; }
+    /* Highlight style for the CCIA Tag Column */
+    .ccia-col { background-color: #e8f4ff; border: 2px solid #007bff !important; font-weight: bold; }
   </style>
 </head>
 <body>
@@ -36,8 +38,7 @@
   <div class="row">
     <div class="rowline">
       <label><b>Portal API Base:</b></label>
-      <input id="apiBase" size="48" />
-      <button class="btn" onclick="saveApiBase()">Save</button>
+      <input id="apiBase" size="48" readonly />
     </div>
 
     <div class="rowline right">
@@ -59,10 +60,6 @@
       <label class="small">Limit:</label>
       <input id="limit" size="6" value="300" />
     </div>
-  </div>
-
-  <div class="small muted">
-    Tip: Works in locked-down networks because clients only make outbound HTTPS requests.
   </div>
 </div>
 
@@ -102,181 +99,105 @@
       <span id="submitOut" class="small muted"></span>
     </div>
   </div>
-
-  <div class="small muted">
-    Note: For WEIGH_CORRECTED include a payload with the corrected value.
-  </div>
-
-  <div class="row">
-    <div style="flex:1;">
-      <label class="small"><b>Payload JSON</b> (optional; for CORRECTED include new value)</label>
-      <textarea id="payloadJson" style="width:100%; height:90px;" class="mono">{
-  "field": "entryWeightKg",
-  "newValue": 672,
-  "reason": "Keying error"
-}</textarea>
-    </div>
-  </div>
 </div>
 
 <table id="events">
 <thead>
   <tr>
-    <th style="width:80px;">Block #</th>
-    <th style="width:120px;">Block Hash</th>
-    <th style="width:120px;">Prev Hash</th>
-    <th style="width:160px;">Event ID</th>
-    <th style="width:140px;">Type</th>
-    <th style="width:180px;">Timestamp</th>
-    <th style="width:100px;">Role</th>
-    <th style="width:110px;">Submitted By</th>
-    <th style="width:140px; background:#e8f4ff;">CCIA Tag</th> <th>Payload</th>
-    <th style="width:100px;">Actions</th>
+    <th style="width:60px;">Block #</th>
+    <th style="width:100px;">Block Hash</th>
+    <th style="width:100px;">Prev Hash</th>
+    <th style="width:140px;">Event ID</th>
+    <th style="width:130px;">Type</th>
+    <th style="width:160px;">Timestamp</th>
+    <th style="width:80px;">Role</th>
+    <th style="width:100px;">Submitted By</th>
+    <th style="width:150px;">CCIA Tag</th> 
+    <th>Payload</th>
+    <th style="width:90px;">Actions</th>
   </tr>
 </thead>
   <tbody></tbody>
 </table>
 
 <script>
-/* ======================
-   CONFIG (LOCKED FOR CLASS)
-====================== */
 const API_BASE = "https://feedlot-chain-starter-cloud-1.onrender.com";
 let autoTimer = null;
 
-function getApiBase() {
-  return API_BASE;
-}
-function saveApiBase() {
-  alert("API base is locked for class.");
-}
-function loadApiBaseFromStorage() {
-  const el = document.getElementById("apiBase");
-  if (el) el.value = API_BASE;
-}
-loadApiBaseFromStorage();
+function getApiBase() { return API_BASE; }
+document.getElementById("apiBase").value = API_BASE;
 
-/* ======================
-   STATUS
-====================== */
 function shortHash(h) {
   if (!h) return "";
   const s = String(h);
-  return s.length <= 12 ? s : (s.slice(0, 10) + "…");
+  return s.length <= 10 ? s : (s.slice(0, 8) + "…");
 }
 
 async function checkStatus() {
   const base = getApiBase();
   const out = document.getElementById("statusOut");
   out.textContent = "Checking...";
-  out.className = "small muted";
-
   try {
     const res = await fetch(`${base}/api/status`, { cache: "no-store" });
     const data = await res.json();
     if (!data.ok) throw new Error(data.error || "status not ok");
-
-    const mode = data.mode || "unknown";
-    const latest = data.latestBlock ?? data.blockNumber ?? "";
-    const tip = data.tipHash ? shortHash(data.tipHash) : "";
-
-    const extra = (latest !== "" || tip !== "")
-      ? ` | Latest block: ${latest}${tip ? " | Tip: " + tip : ""}`
-      : "";
-
-    out.textContent = `OK (${mode})${extra}`;
+    out.textContent = `OK | Latest: ${data.latestBlock ?? ""} | Tip: ${shortHash(data.tipHash)}`;
     out.className = "small ok";
   } catch (e) {
-    out.textContent = `ERROR: ${String(e).slice(0,160)}`;
+    out.textContent = "Offline or Error";
     out.className = "small warn";
   }
 }
 
-/* ======================
-   LOAD EVENTS
-====================== */
-function parseLimit() {
-  const raw = (document.getElementById("limit").value || "300").trim();
-  const n = parseInt(raw, 10);
-  if (!Number.isFinite(n) || n <= 0) return 300;
-  return Math.min(1000, n);
-}
-
 async function fetchEvents() {
-  const base = getApiBase();
-  const limit = parseLimit();
-  const res = await fetch(`${base}/api/events?limit=${limit}`, { cache: "no-store" });
+  const limit = document.getElementById("limit").value || 300;
+  const res = await fetch(`${getApiBase()}/api/events?limit=${limit}`, { cache: "no-store" });
   const data = await res.json();
-  if (!data.ok) throw new Error(data.error || "Failed to fetch events");
   return data.events || [];
-}
-
-function looksVoidedOrCorrected(type) {
-  return /_(VOIDED|CORRECTED)$/.test(type || "");
-}
-
-function pillForType(type) {
-  const cls = looksVoidedOrCorrected(type) ? "pill bad" : "pill good";
-  return `<span class="${cls}">${escapeHtml(type || "")}</span>`;
-}
-
-function escapeHtml(s) {
-  return String(s || "")
-    .replaceAll("&","&amp;")
-    .replaceAll("<","&lt;")
-    .replaceAll(">","&gt;")
-    .replaceAll('"',"&quot;")
-    .replaceAll("'","&#039;");
-}
-
-function copyText(t) {
-  navigator.clipboard.writeText(t).catch(() => {});
 }
 
 function render(events, tagFilter) {
   const tbody = document.querySelector("#events tbody");
   tbody.innerHTML = "";
-
   const list = [...events].reverse();
 
   for (const e of list) {
     if (tagFilter && e.tag !== tagFilter) continue;
 
     const tr = document.createElement("tr");
-    if (looksVoidedOrCorrected(e.eventType)) tr.classList.add("hl");
+    if (/_(VOIDED|CORRECTED)$/.test(e.eventType)) tr.classList.add("hl");
 
     const payloadPretty = JSON.stringify(e.payload ?? {}, null, 2);
-    const submittedBy = e.submittedBy ?? e.role ?? "";
-
-    // This string contains exactly 11 <td> cells to match your 11 <th> headers
+    
     tr.innerHTML = `
       <td class="mono small">${escapeHtml(e.blockNumber ?? "")}</td>
       <td class="mono small" title="${escapeHtml(e.blockHash)}">${escapeHtml(shortHash(e.blockHash))}</td>
       <td class="mono small" title="${escapeHtml(e.prevHash)}">${escapeHtml(shortHash(e.prevHash))}</td>
       <td class="mono small">${escapeHtml(e.eventId || "")}</td>
-      <td>${pillForType(e.eventType)}</td>
+      <td><span class="${/_(VOIDED|CORRECTED)$/.test(e.eventType) ? 'pill bad' : 'pill good'}">${escapeHtml(e.eventType)}</span></td>
       <td class="small">${escapeHtml(new Date(e.at || Date.now()).toLocaleString())}</td>
       <td class="small">${escapeHtml(e.role || "")}</td>
-      <td class="small">${escapeHtml(submittedBy)}</td>
-      <td style="background-color: #e8f4ff; border: 2px solid #007bff;"><b>${escapeHtml(e.tag || "N/A")}</b></td>
+      <td class="small">${escapeHtml(e.submittedBy || e.role || "")}</td>
+      <td class="ccia-col">${escapeHtml(e.tag || "N/A")}</td>
       <td><pre class="small">${escapeHtml(payloadPretty)}</pre></td>
       <td class="small">
-        <button class="btn" onclick="copyEventId('${escapeHtml(e.eventId || "")}')">ID</button>
-        <button class="btn" onclick="useAsCorrection('${escapeHtml(e.eventId || "")}','${escapeHtml(e.tag || "")}')">Fix</button>
+        <button class="btn" onclick="copyEventId('${escapeHtml(e.eventId)}')">ID</button>
+        <button class="btn" onclick="useAsCorrection('${escapeHtml(e.eventId)}','${escapeHtml(e.tag)}')">Fix</button>
       </td>
     `;
     tbody.appendChild(tr);
   }
 }
 
-function copyEventId(id) {
-  if (!id) return;
-  copyText(id);
+function escapeHtml(s) {
+  return String(s || "").replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#039;"}[m]));
 }
 
+function copyEventId(id) { navigator.clipboard.writeText(id); }
+
 function useAsCorrection(id, tag) {
-  document.getElementById("correctsId").value = id || "";
-  if (tag) document.getElementById("corrTag").value = tag;
+  document.getElementById("correctsId").value = id;
+  document.getElementById("corrTag").value = tag;
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -291,74 +212,42 @@ async function loadAll() {
   await loadEvents();
 }
 
-/* ======================
-   AUTO REFRESH
-====================== */
 function toggleAuto() {
-  const enabled = document.getElementById("auto").checked;
   if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
-  if (enabled) {
-    autoTimer = setInterval(() => {
-      loadEvents().catch(() => {});
-      checkStatus().catch(() => {});
-    }, 10000);
+  if (document.getElementById("auto").checked) {
+    autoTimer = setInterval(() => { loadEvents(); checkStatus(); }, 10000);
   }
 }
 
-/* ======================
-   SUBMIT CORRECTION (OPTIONAL)
-====================== */
 async function submitCorrection() {
-  const base = getApiBase();
   const out = document.getElementById("submitOut");
-  out.textContent = "Submitting...";
-  out.className = "small muted";
-
-  const role = document.getElementById("role").value.trim();
-  const pin = document.getElementById("pin").value.trim();
-  const tag = document.getElementById("corrTag").value.trim();
-  const eventType = document.getElementById("corrType").value.trim();
-  const correctsEventId = document.getElementById("correctsId").value.trim();
-
-  if (!role || !pin) { out.textContent = "Missing role or PIN."; out.className="small warn"; return; }
-  if (!tag) { out.textContent = "Missing tag."; out.className="small warn"; return; }
-  if (!eventType) { out.textContent = "Missing eventType."; out.className="small warn"; return; }
-  if (!correctsEventId) { out.textContent = "Missing corrects eventId."; out.className="small warn"; return; }
-
-  let payload = {};
-  try {
-    payload = JSON.parse(document.getElementById("payloadJson").value || "{}");
-  } catch {
-    out.textContent = "Payload JSON is invalid.";
-    out.className = "small warn";
-    return;
-  }
-
-  payload.correctsEventId = correctsEventId;
+  const payload = JSON.parse(document.getElementById("payloadJson").value || "{}");
+  payload.correctsEventId = document.getElementById("correctsId").value;
 
   try {
-    const res = await fetch(`${base}/api/submit`, {
+    const res = await fetch(`${getApiBase()}/api/submit`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ role, pin, tag, eventType, payload })
+      body: JSON.stringify({
+        role: document.getElementById("role").value,
+        pin: document.getElementById("pin").value,
+        tag: document.getElementById("corrTag").value,
+        eventType: document.getElementById("corrType").value,
+        payload
+      })
     });
     const data = await res.json();
-    if (!data.ok) throw new Error(data.error || "submit failed");
-
-    const extra = data.blockNumber ? ` (block ${data.blockNumber})` : "";
-    out.textContent = `OK: created eventId ${data.eventId}${extra}`;
-    out.className = "small ok";
-    await loadEvents();
-    await checkStatus();
-  } catch (e) {
-    out.textContent = `ERROR: ${String(e).slice(0,200)}`;
-    out.className = "small warn";
-  }
+    if (data.ok) {
+      out.textContent = "Success!";
+      loadEvents();
+    } else {
+      out.textContent = "Error: " + data.error;
+    }
+  } catch (e) { out.textContent = "Submission Failed"; }
 }
 
-/* Auto status check on load */
-checkStatus().catch(() => {});
+checkStatus();
+loadEvents();
 </script>
-
 </body>
 </html>
