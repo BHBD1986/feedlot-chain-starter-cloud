@@ -238,10 +238,10 @@ function render(events, tagFilter) {
   const tbody = document.querySelector("#events tbody");
   tbody.innerHTML = "";
 
-  // newest last tends to be easier to read as a timeline
   const list = [...events].reverse();
 
   for (const e of list) {
+    // If a tag filter is active, skip records that don't match
     if (tagFilter && e.tag !== tagFilter) continue;
 
     const tr = document.createElement("tr");
@@ -250,14 +250,12 @@ function render(events, tagFilter) {
     const payloadPretty = JSON.stringify(e.payload ?? {}, null, 2);
     const submittedBy = e.submittedBy ?? e.role ?? "";
 
-    const bnum = e.blockNumber ?? "";
-    const bh = e.blockHash ?? "";
-    const ph = e.prevHash ?? "";
-
+    // Add the Tag cell here (ensure it matches the order of your <th>)
     tr.innerHTML = `
-      <td class="mono small">${escapeHtml(bnum)}</td>
-      <td class="mono small" title="${escapeHtml(bh)}">${escapeHtml(shortHash(bh))}</td>
-      <td class="mono small" title="${escapeHtml(ph)}">${escapeHtml(shortHash(ph))}</td>
+      <td class="mono small">${escapeHtml(e.blockNumber ?? "")}</td>
+      <td class="hl"><b>${escapeHtml(e.tag || "")}</b></td> 
+      <td class="mono small" title="${escapeHtml(e.blockHash)}">${escapeHtml(shortHash(e.blockHash))}</td>
+      <td class="mono small" title="${escapeHtml(e.prevHash)}">${escapeHtml(shortHash(e.prevHash))}</td>
       <td class="mono small">${escapeHtml(e.eventId || "")}</td>
       <td>${pillForType(e.eventType)}</td>
       <td class="small">${escapeHtml(new Date(e.at || Date.now()).toLocaleString())}</td>
@@ -265,8 +263,8 @@ function render(events, tagFilter) {
       <td class="small">${escapeHtml(submittedBy)}</td>
       <td><pre class="small">${escapeHtml(payloadPretty)}</pre></td>
       <td class="small">
-        <button class="btn" onclick="copyEventId('${escapeHtml(e.eventId || "")}')">Copy ID</button>
-        <button class="btn" onclick="useAsCorrection('${escapeHtml(e.eventId || "")}','${escapeHtml(e.tag || "")}')">Use as ref</button>
+        <button class="btn" onclick="copyEventId('${escapeHtml(e.eventId || "")}')">ID</button>
+        <button class="btn" onclick="useAsCorrection('${escapeHtml(e.eventId || "")}','${escapeHtml(e.tag || "")}')">Fix</button>
       </td>
     `;
     tbody.appendChild(tr);
