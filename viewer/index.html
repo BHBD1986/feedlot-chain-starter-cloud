@@ -238,22 +238,18 @@ function render(events, tagFilter) {
   const tbody = document.querySelector("#events tbody");
   tbody.innerHTML = "";
 
-  // Newest items at the top
   const list = [...events].reverse();
 
   for (const e of list) {
-    // 1. Filter by tag if a search term exists
     if (tagFilter && e.tag !== tagFilter) continue;
 
     const tr = document.createElement("tr");
-    
-    // Highlight rows that are corrections or voids
     if (looksVoidedOrCorrected(e.eventType)) tr.classList.add("hl");
 
     const payloadPretty = JSON.stringify(e.payload ?? {}, null, 2);
     const submittedBy = e.submittedBy ?? e.role ?? "";
 
-    // 2. Build the row - MUST HAVE EXACTLY 11 <td> ELEMENTS
+    // This string contains exactly 11 <td> cells to match your 11 <th> headers
     tr.innerHTML = `
       <td class="mono small">${escapeHtml(e.blockNumber ?? "")}</td>
       <td class="mono small" title="${escapeHtml(e.blockHash)}">${escapeHtml(shortHash(e.blockHash))}</td>
@@ -263,7 +259,7 @@ function render(events, tagFilter) {
       <td class="small">${escapeHtml(new Date(e.at || Date.now()).toLocaleString())}</td>
       <td class="small">${escapeHtml(e.role || "")}</td>
       <td class="small">${escapeHtml(submittedBy)}</td>
-      <td class="hl"><b>${escapeHtml(e.tag || "N/A")}</b></td> 
+      <td style="background-color: #e8f4ff; border: 2px solid #007bff;"><b>${escapeHtml(e.tag || "N/A")}</b></td>
       <td><pre class="small">${escapeHtml(payloadPretty)}</pre></td>
       <td class="small">
         <button class="btn" onclick="copyEventId('${escapeHtml(e.eventId || "")}')">ID</button>
