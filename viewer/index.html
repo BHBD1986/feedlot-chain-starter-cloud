@@ -4,99 +4,46 @@
   <meta charset="UTF-8" />
   <title>Feedlot Ledger Viewer</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 20px; max-width: 1400px; }
+    body { font-family: Arial, sans-serif; margin: 20px; max-width: 1600px; }
     input, select, button { padding: 6px; margin: 4px; }
     .row { display:flex; flex-wrap:wrap; gap:12px; align-items:center; }
     .box { border: 1px solid #ddd; padding: 12px; border-radius: 10px; margin: 12px 0; }
-    table { border-collapse: collapse; width: 100%; margin-top: 12px; }
-    th, td { border: 1px solid #ccc; padding: 6px; vertical-align: top; }
-    th { background: #eee; text-align: left; font-size: 13px; }
-    pre { margin: 0; white-space: pre-wrap; word-break: break-word; }
+    table { border-collapse: collapse; width: 100%; margin-top: 12px; table-layout: fixed; }
+    th, td { border: 1px solid #ccc; padding: 8px; vertical-align: top; overflow: hidden; text-overflow: ellipsis; }
+    th { background: #eee; text-align: left; font-size: 12px; text-transform: uppercase; }
+    pre { margin: 0; white-space: pre-wrap; word-break: break-all; font-size: 11px; }
     .muted { color:#666; }
-    .pill { display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; border:1px solid #ddd; background:#fafafa; }
-    .pill.bad { border-color:#f1c7c7; background:#fff5f5; }
-    .pill.good { border-color:#c7f1d3; background:#f3fff6; }
+    .pill { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; border:1px solid #ddd; background:#fafafa; }
+    .pill.bad { border-color:#f1c7c7; background:#fff5f5; color: #a33; }
+    .pill.good { border-color:#c7f1d3; background:#f3fff6; color: #2a7; }
     .warn { color:#a33; font-weight:600; }
     .ok { color:#2a7; font-weight:600; }
-    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+    .mono { font-family: "Courier New", monospace; font-size: 11px; }
     .small { font-size: 12px; }
     .right { margin-left:auto; }
-    .btn { cursor:pointer; }
-    .btn:disabled { opacity:0.6; cursor:not-allowed; }
-    .rowline { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    .btn { cursor:pointer; background: #f0f0f0; border: 1px solid #ccc; border-radius: 4px; }
+    .btn:hover { background: #e0e0e0; }
     .hl { background:#fffef0; }
-    /* Highlight style for the CCIA Tag Column */
-    .ccia-col { background-color: #e8f4ff; border: 2px solid #007bff !important; font-weight: bold; }
+    /* CCIA Tag Styling */
+    .tag-cell { background-color: #e8f4ff; font-weight: bold; border-left: 3px solid #007bff !important; }
   </style>
 </head>
 <body>
 
 <h2>Feedlot Ledger – Event Viewer</h2>
-<div class="muted">Source: cloud ledger (append-only log) with a simulated block chain (hash-linked records).</div>
+<div class="muted">Live append-only blockchain ledger for CCIA cattle tracking.</div>
 
 <div class="box">
   <div class="row">
     <div class="rowline">
-      <label><b>Portal API Base:</b></label>
-      <input id="apiBase" size="48" readonly />
+      <label><b>CCIA Tag Filter:</b></label>
+      <input id="tag" size="26" placeholder="Enter Tag #" />
+      <button class="btn" onclick="loadEvents()">Filter</button>
+      <button class="btn" onclick="loadAll()">View All</button>
     </div>
-
     <div class="rowline right">
-      <button class="btn" onclick="checkStatus()">Check Status</button>
+      <button class="btn" onclick="checkStatus()">Refresh Status</button>
       <span id="statusOut" class="small muted"></span>
-    </div>
-  </div>
-
-  <div class="row">
-    <div class="rowline">
-      <label><b>CCIA Tag filter:</b></label>
-      <input id="tag" size="26" placeholder="Optional, e.g., 124000123456789" />
-      <button class="btn" onclick="loadEvents()">Load Events</button>
-      <button class="btn" onclick="loadAll()">Load ALL</button>
-    </div>
-
-    <div class="rowline right">
-      <label class="small"><input type="checkbox" id="auto" onchange="toggleAuto()"> Auto-refresh (10s)</label>
-      <label class="small">Limit:</label>
-      <input id="limit" size="6" value="300" />
-    </div>
-  </div>
-</div>
-
-<div class="box">
-  <div class="row">
-    <div>
-      <b>Quick correction/void (optional)</b>
-      <div class="muted small">Creates a new event that references an earlier eventId. It does not edit history.</div>
-    </div>
-  </div>
-
-  <div class="row">
-    <div class="rowline">
-      <label class="small"><b>Role</b></label>
-      <select id="role">
-        <option value="SCALE">SCALE</option>
-        <option value="VET">VET</option>
-      </select>
-
-      <label class="small"><b>PIN</b></label>
-      <input id="pin" type="password" size="10" placeholder="PIN" />
-
-      <label class="small"><b>Tag</b></label>
-      <input id="corrTag" size="18" placeholder="same CCIA tag" />
-
-      <label class="small"><b>Type</b></label>
-      <select id="corrType">
-        <option value="WEIGH_VOIDED">WEIGH_VOIDED</option>
-        <option value="WEIGH_CORRECTED">WEIGH_CORRECTED</option>
-        <option value="TREATMENT_VOIDED">TREATMENT_VOIDED</option>
-      </select>
-
-      <label class="small"><b>Corrects eventId</b></label>
-      <input id="correctsId" class="mono" size="22" placeholder="Paste eventId" />
-
-      <button class="btn" onclick="submitCorrection()">Submit</button>
-      <span id="submitOut" class="small muted"></span>
     </div>
   </div>
 </div>
@@ -104,17 +51,17 @@
 <table id="events">
 <thead>
   <tr>
-    <th style="width:60px;">Block #</th>
-    <th style="width:100px;">Block Hash</th>
-    <th style="width:100px;">Prev Hash</th>
-    <th style="width:140px;">Event ID</th>
-    <th style="width:130px;">Type</th>
-    <th style="width:160px;">Timestamp</th>
-    <th style="width:80px;">Role</th>
-    <th style="width:100px;">Submitted By</th>
-    <th style="width:150px;">CCIA Tag</th> 
+    <th style="width: 60px;">Block #</th>
+    <th style="width: 100px;">Block Hash</th>
+    <th style="width: 100px;">Prev Hash</th>
+    <th style="width: 150px;">Event ID</th>
+    <th style="width: 140px;">Type</th>
+    <th style="width: 160px;">Timestamp</th>
+    <th style="width: 80px;">Role</th>
+    <th style="width: 110px;">Submitted By</th>
+    <th style="width: 150px;" class="tag-cell">CCIA Tag</th>
     <th>Payload</th>
-    <th style="width:90px;">Actions</th>
+    <th style="width: 80px;">Actions</th>
   </tr>
 </thead>
   <tbody></tbody>
@@ -122,132 +69,76 @@
 
 <script>
 const API_BASE = "https://feedlot-chain-starter-cloud-1.onrender.com";
-let autoTimer = null;
-
-function getApiBase() { return API_BASE; }
-document.getElementById("apiBase").value = API_BASE;
 
 function shortHash(h) {
-  if (!h) return "";
-  const s = String(h);
-  return s.length <= 10 ? s : (s.slice(0, 8) + "…");
+  if (!h) return "000000...";
+  return h.length <= 10 ? h : (h.slice(0, 8) + "...");
 }
 
 async function checkStatus() {
-  const base = getApiBase();
   const out = document.getElementById("statusOut");
-  out.textContent = "Checking...";
   try {
-    const res = await fetch(`${base}/api/status`, { cache: "no-store" });
+    const res = await fetch(`${API_BASE}/api/status`);
     const data = await res.json();
-    if (!data.ok) throw new Error(data.error || "status not ok");
-    out.textContent = `OK | Latest: ${data.latestBlock ?? ""} | Tip: ${shortHash(data.tipHash)}`;
+    out.textContent = `Node Online | Height: ${data.latestBlock ?? 0}`;
     out.className = "small ok";
   } catch (e) {
-    out.textContent = "Offline or Error";
+    out.textContent = "Node Connection Error";
     out.className = "small warn";
   }
 }
 
-async function fetchEvents() {
-  const limit = document.getElementById("limit").value || 300;
-  const res = await fetch(`${getApiBase()}/api/events?limit=${limit}`, { cache: "no-store" });
-  const data = await res.json();
-  return data.events || [];
-}
-
-function render(events, tagFilter) {
-  const tbody = document.querySelector("#events tbody");
-  tbody.innerHTML = "";
-  const list = [...events].reverse();
-
-  for (const e of list) {
-    if (tagFilter && e.tag !== tagFilter) continue;
-
-    const tr = document.createElement("tr");
-    if (/_(VOIDED|CORRECTED)$/.test(e.eventType)) tr.classList.add("hl");
-
-    const payloadPretty = JSON.stringify(e.payload ?? {}, null, 2);
-    
-    tr.innerHTML = `
-      <td class="mono small">${escapeHtml(e.blockNumber ?? "")}</td>
-      <td class="mono small" title="${escapeHtml(e.blockHash)}">${escapeHtml(shortHash(e.blockHash))}</td>
-      <td class="mono small" title="${escapeHtml(e.prevHash)}">${escapeHtml(shortHash(e.prevHash))}</td>
-      <td class="mono small">${escapeHtml(e.eventId || "")}</td>
-      <td><span class="${/_(VOIDED|CORRECTED)$/.test(e.eventType) ? 'pill bad' : 'pill good'}">${escapeHtml(e.eventType)}</span></td>
-      <td class="small">${escapeHtml(new Date(e.at || Date.now()).toLocaleString())}</td>
-      <td class="small">${escapeHtml(e.role || "")}</td>
-      <td class="small">${escapeHtml(e.submittedBy || e.role || "")}</td>
-      <td class="ccia-col">${escapeHtml(e.tag || "N/A")}</td>
-      <td><pre class="small">${escapeHtml(payloadPretty)}</pre></td>
-      <td class="small">
-        <button class="btn" onclick="copyEventId('${escapeHtml(e.eventId)}')">ID</button>
-        <button class="btn" onclick="useAsCorrection('${escapeHtml(e.eventId)}','${escapeHtml(e.tag)}')">Fix</button>
-      </td>
-    `;
-    tbody.appendChild(tr);
-  }
-}
-
-function escapeHtml(s) {
-  return String(s || "").replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#039;"}[m]));
-}
-
-function copyEventId(id) { navigator.clipboard.writeText(id); }
-
-function useAsCorrection(id, tag) {
-  document.getElementById("correctsId").value = id;
-  document.getElementById("corrTag").value = tag;
-  window.scrollTo({ top: 0, behavior: "smooth" });
-}
-
 async function loadEvents() {
-  const tag = document.getElementById("tag").value.trim();
-  const events = await fetchEvents();
-  render(events, tag);
-}
-
-async function loadAll() {
-  document.getElementById("tag").value = "";
-  await loadEvents();
-}
-
-function toggleAuto() {
-  if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
-  if (document.getElementById("auto").checked) {
-    autoTimer = setInterval(() => { loadEvents(); checkStatus(); }, 10000);
-  }
-}
-
-async function submitCorrection() {
-  const out = document.getElementById("submitOut");
-  const payload = JSON.parse(document.getElementById("payloadJson").value || "{}");
-  payload.correctsEventId = document.getElementById("correctsId").value;
+  const tagFilter = document.getElementById("tag").value.trim();
+  const tbody = document.querySelector("#events tbody");
+  tbody.innerHTML = "<tr><td colspan='11'>Loading ledger data...</td></tr>";
 
   try {
-    const res = await fetch(`${getApiBase()}/api/submit`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        role: document.getElementById("role").value,
-        pin: document.getElementById("pin").value,
-        tag: document.getElementById("corrTag").value,
-        eventType: document.getElementById("corrType").value,
-        payload
-      })
-    });
+    const res = await fetch(`${API_BASE}/api/events?limit=500`);
     const data = await res.json();
-    if (data.ok) {
-      out.textContent = "Success!";
-      loadEvents();
-    } else {
-      out.textContent = "Error: " + data.error;
-    }
-  } catch (e) { out.textContent = "Submission Failed"; }
+    const events = data.events || [];
+    
+    tbody.innerHTML = "";
+    // Reverse to show newest at the top
+    const list = [...events].reverse();
+
+    list.forEach(e => {
+      if (tagFilter && e.tag !== tagFilter) return;
+
+      const tr = document.createElement("tr");
+      if (e.eventType.includes("VOIDED") || e.eventType.includes("CORRECTED")) tr.classList.add("hl");
+
+      tr.innerHTML = `
+        <td class="mono">${e.blockNumber ?? ""}</td>
+        <td class="mono" title="${e.blockHash}">${shortHash(e.blockHash)}</td>
+        <td class="mono" title="${e.prevHash}">${shortHash(e.prevHash)}</td>
+        <td class="mono">${e.eventId || ""}</td>
+        <td><span class="${tr.classList.contains('hl') ? 'pill bad' : 'pill good'}">${e.eventType}</span></td>
+        <td class="small">${new Date(e.at).toLocaleString()}</td>
+        <td class="small">${e.role || ""}</td>
+        <td class="small">${e.submittedBy || ""}</td>
+        <td class="tag-cell">${e.tag || "N/A"}</td>
+        <td><pre>${JSON.stringify(e.payload, null, 2)}</pre></td>
+        <td>
+          <button class="btn small" onclick="navigator.clipboard.writeText('${e.eventId}')">Copy ID</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+  } catch (e) {
+    tbody.innerHTML = "<tr><td colspan='11' class='warn'>Error loading events from blockchain.</td></tr>";
+  }
 }
 
+function loadAll() {
+  document.getElementById("tag").value = "";
+  loadEvents();
+}
+
+// Initial Load
 checkStatus();
 loadEvents();
 </script>
+
 </body>
 </html>
