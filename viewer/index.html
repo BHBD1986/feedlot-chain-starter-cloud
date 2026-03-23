@@ -9,10 +9,8 @@
     table { width: 100%; border-collapse: collapse; background: white; table-layout: fixed; }
     th, td { border: 1px solid #ccc; padding: 8px; vertical-align: top; font-size: 12px; overflow: hidden; }
     th { background: #eee; text-align: left; position: sticky; top: 0; }
-    
-    /* This makes the Tag column pop so you know it's working */
+
     .tag-highlight { background-color: #e8f4ff; font-weight: bold; color: #007bff; border: 2px solid #007bff !important; }
-    
     .mono { font-family: monospace; color: #555; }
     pre { margin: 0; white-space: pre-wrap; font-size: 11px; background: #fafafa; border: 1px solid #eee; padding: 4px; }
     .pill { display: inline-block; padding: 2px 6px; border-radius: 4px; background: #d4edda; color: #155724; font-weight: bold; }
@@ -27,7 +25,7 @@
   <span id="status" style="margin-left: 10px; color: #666;"></span>
 </div>
 
-<table id="ledgerTable">
+<table>
   <thead>
     <tr>
       <th style="width: 60px;">Block #</th>
@@ -47,6 +45,44 @@
 </table>
 
 <script>
+function safeParse(jsonString) {
+  try {
+    return JSON.parse(jsonString);
+  } catch {
+    return null;
+  }
+}
+
+function getTag(e) {
+  if (e.tag) return e.tag;
+  if (e.payload && e.payload.tag) return e.payload.tag;
+
+  if (e.payloadJson) {
+    const parsed = safeParse(e.payloadJson);
+    if (parsed && parsed.tag) return parsed.tag;
+  }
+
+  return "NOT FOUND";
+}
+
+function getPayloadDisplay(e) {
+  if (e.payload) {
+    return JSON.stringify(e.payload, null, 2);
+  }
+
+  if (e.payloadJson) {
+    const parsed = safeParse(e.payloadJson);
+    if (parsed) return JSON.stringify(parsed, null, 2);
+    return e.payloadJson;
+  }
+
+  return "";
+}
+
+function shortHash(h) {
+  return h ? h.substring(0, 8) + "..." : "-";
+}
+
 async function loadLedger() {
   const status = document.getElementById("status");
   const tbody = document.getElementById("tbody");
@@ -55,29 +91,32 @@ async function loadLedger() {
   try {
     const res = await fetch("https://feedlot-chain-starter-cloud-1.onrender.com/api/events?limit=100");
     const data = await res.json();
-    
-    tbody.innerHTML = "";
 
-    // Sort newest to oldest
-    const events = data.events.sort((a, b) => b.blockNumber - a.blockNumber);
+    const events = (data.events || [])
+      .slice()
+      .sort((a, b) => (b.blockNumber || 0) - (a.blockNumber || 0));
+
+    tbody.innerHTML = "";
 
     events.forEach(e => {
       const tr = document.createElement("tr");
 
-      // We precisely map the 11 columns here
       tr.innerHTML = `
         <td class="mono">${e.blockNumber ?? ""}</td>
-        <td class="mono">${(e.blockHash || "0x00...").substring(0,8)}...</td>
-        <td class="mono">${(e.prevHash || "0x00...").substring(0,8)}...</td>
+        <td class="mono">${shortHash(e.blockHash)}</td>
+        <td class="mono">${shortHash(e.prevHash)}</td>
         <td class="mono">${e.eventId || "N/A"}</td>
-        <td><span class="pill">${e.eventType}</span></td>
-        <td>${new Date(e.at).toLocaleString()}</td>
+        <td><span class="pill">${e.eventType || ""}</span></td>
+        <td>${e.at ? new Date(e.at).toLocaleString() : ""}</td>
         <td>${e.role || ""}</td>
-        <td class="mono" title="${e.submittedBy}">${(e.submittedBy || "").substring(0,8)}...</td>
-        <td class="tag-highlight">${e.tag ||e.payload?.tag || (e.payloadJson ? JSON.parse(e.payloadJson).tag : "") || "NOT FOUND"}</td>
-        <td><pre>${JSON.stringify(e.payload, null, 2)}</pre></td>
+        <td class="mono" title="${e.submittedBy || ""}">
+          ${(e.submittedBy || "").substring(0,8)}...
+        </td>
+        <td class="tag-highlight">${getTag(e)}</td>
+        <td><pre>${getPayloadDisplay(e)}</pre></td>
         <td><button onclick="alert('Block: ${e.blockNumber}')">View</button></td>
       `;
+
       tbody.appendChild(tr);
     });
 
@@ -88,7 +127,6 @@ async function loadLedger() {
   }
 }
 
-// Start
 loadLedger();
 </script>
 
