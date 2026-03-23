@@ -1,8 +1,9 @@
 Data Entry
 https://feedlot-chain-starter-cloud-1.onrender.com/
 
-Event Viewer
+Event Viewer *edit docs>index.html for the viewer
 https://bhbd1986.github.io/feedlot-chain-starter-cloud/
+
 
 View the raw block chain (ledger)
 https://feedlot-chain-starter-cloud-1.onrender.com/api/events
@@ -36,6 +37,7 @@ Tag B: 124000222222222
 Payload:
 {"carrier":"pony_exp","trailerId":"TRL-02","driver":" A.Grinde ","pickup":" AuctionX "}
  
+
 GROUP 3 — TRUCK DELIVERY FEEDLOT
 https://feedlot-chain-starter-cloud-1.onrender.com/
 Role: TRUCK
@@ -47,6 +49,8 @@ Payload:
 Tag B: 124000222222222
 Payload:
 {"carrier":"pony_exp","trailerId":"TRL-88","driver":" A.Grinde ","destination":" BAT_FEEDERS "} 
+
+
 GROUP 4 — FEEDLOT
 https://feedlot-chain-starter-cloud-1.onrender.com/
 Role: FEEDLOT
@@ -162,7 +166,6 @@ Payload:
 Tag C: 124000333333333
 Payload:
 {"plantId":"PLANT-3","receivedCondition":"Excellent"}
-
 Payload:
 {"plantId":"PLANT-3","receivedCondition":"Normal"}
 
