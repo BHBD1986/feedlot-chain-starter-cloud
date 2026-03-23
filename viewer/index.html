@@ -238,18 +238,22 @@ function render(events, tagFilter) {
   const tbody = document.querySelector("#events tbody");
   tbody.innerHTML = "";
 
+  // Newest items at the top
   const list = [...events].reverse();
 
   for (const e of list) {
+    // 1. Filter by tag if a search term exists
     if (tagFilter && e.tag !== tagFilter) continue;
 
     const tr = document.createElement("tr");
+    
+    // Highlight rows that are corrections or voids
     if (looksVoidedOrCorrected(e.eventType)) tr.classList.add("hl");
 
     const payloadPretty = JSON.stringify(e.payload ?? {}, null, 2);
     const submittedBy = e.submittedBy ?? e.role ?? "";
 
-    // FIXED: Added the missing <td> for the Tag so it matches the 11 headers
+    // 2. Build the row - MUST HAVE EXACTLY 11 <td> ELEMENTS
     tr.innerHTML = `
       <td class="mono small">${escapeHtml(e.blockNumber ?? "")}</td>
       <td class="mono small" title="${escapeHtml(e.blockHash)}">${escapeHtml(shortHash(e.blockHash))}</td>
