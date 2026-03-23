@@ -4,131 +4,92 @@
   <meta charset="UTF-8" />
   <title>Feedlot Ledger Viewer</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 20px; max-width: 1600px; background-color: #f9f9f9; }
-    input, select, button { padding: 6px; margin: 4px; }
-    .box { border: 1px solid #ddd; padding: 15px; border-radius: 10px; margin-bottom: 20px; background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    body { font-family: Arial, sans-serif; margin: 20px; max-width: 1600px; background: #f4f7f6; }
+    .box { background: white; padding: 15px; border-radius: 8px; border: 1px solid #ddd; margin-bottom: 20px; }
+    table { width: 100%; border-collapse: collapse; background: white; table-layout: fixed; }
+    th, td { border: 1px solid #ccc; padding: 8px; vertical-align: top; font-size: 12px; overflow: hidden; }
+    th { background: #eee; text-align: left; position: sticky; top: 0; }
     
-    /* Table Styling */
-    table { border-collapse: collapse; width: 100%; background: white; }
-    th, td { border: 1px solid #ccc; padding: 10px; vertical-align: top; font-size: 13px; }
-    th { background: #f2f2f2; text-align: left; position: sticky; top: 0; z-index: 10; }
+    /* This makes the Tag column pop so you know it's working */
+    .tag-highlight { background-color: #e8f4ff; font-weight: bold; color: #007bff; border: 2px solid #007bff !important; }
     
-    /* Specific Column Highlight for CCIA Tag */
-    .ccia-header { background-color: #007bff !important; color: white; }
-    .ccia-cell { background-color: #eef7ff; font-weight: bold; border-left: 2px solid #007bff; border-right: 2px solid #007bff; color: #0056b3; }
-
-    .mono { font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace; font-size: 11px; color: #444; }
-    .pill { display:inline-block; padding:2px 8px; border-radius:12px; font-size:11px; font-weight: bold; border:1px solid #ddd; }
-    .pill.bad { border-color:#f1c7c7; background:#fff5f5; color: #a33; }
-    .pill.good { border-color:#c7f1d3; background:#f3fff6; color: #2a7; }
-    pre { margin: 0; white-space: pre-wrap; word-break: break-all; background: #fafafa; padding: 5px; border-radius: 4px; border: 1px solid #eee; }
-    .hl { background-color: #fff9e6; } /* Highlight for voided/corrected */
-    .muted { color: #777; font-size: 12px; }
+    .mono { font-family: monospace; color: #555; }
+    pre { margin: 0; white-space: pre-wrap; font-size: 11px; background: #fafafa; border: 1px solid #eee; padding: 4px; }
+    .pill { display: inline-block; padding: 2px 6px; border-radius: 4px; background: #d4edda; color: #155724; font-weight: bold; }
   </style>
 </head>
 <body>
 
-<h2>Feedlot Ledger – Event Viewer</h2>
+<h2>Feedlot Ledger Viewer</h2>
 
 <div class="box">
-  <div style="display: flex; justify-content: space-between; align-items: center;">
-    <div>
-      <label><b>CCIA Tag Filter:</b></label>
-      <input id="tagFilter" size="25" placeholder="Search Tag..." />
-      <button onclick="loadData()">Apply Filter</button>
-      <button onclick="clearFilter()">Show All</button>
-    </div>
-    <div id="status" class="muted">Connecting to ledger...</div>
-  </div>
+  <button onclick="loadLedger()" style="padding: 10px 20px; cursor:pointer;">RELOAD DATA</button>
+  <span id="status" style="margin-left: 10px; color: #666;"></span>
 </div>
 
 <table id="ledgerTable">
   <thead>
     <tr>
-      <th style="width: 70px;">Block #</th>
+      <th style="width: 60px;">Block #</th>
       <th style="width: 100px;">Block Hash</th>
       <th style="width: 100px;">Prev Hash</th>
       <th style="width: 150px;">Event ID</th>
       <th style="width: 130px;">Type</th>
       <th style="width: 160px;">Timestamp</th>
-      <th style="width: 90px;">Role</th>
-      <th style="width: 120px;">Submitted By</th>
-      <th style="width: 160px;" class="ccia-header">CCIA Tag</th>
+      <th style="width: 80px;">Role</th>
+      <th style="width: 110px;">Submitted By</th>
+      <th style="width: 150px;">CCIA Tag</th> 
       <th>Payload</th>
       <th style="width: 80px;">Actions</th>
     </tr>
   </thead>
-  <tbody id="ledgerBody">
-    </tbody>
+  <tbody id="tbody"></tbody>
 </table>
 
 <script>
-const API_URL = "https://feedlot-chain-starter-cloud-1.onrender.com/api/events?limit=300";
-
-async function loadData() {
-  const filterVal = document.getElementById("tagFilter").value.trim();
-  const tbody = document.getElementById("ledgerBody");
+async function loadLedger() {
   const status = document.getElementById("status");
-  
-  try {
-    const response = await fetch(API_URL);
-    const result = await response.json();
-    
-    if (!result.ok) throw new Error("API Error");
+  const tbody = document.getElementById("tbody");
+  status.innerText = "Loading...";
 
-    const events = result.events.reverse(); // Newest first
+  try {
+    const res = await fetch("https://feedlot-chain-starter-cloud-1.onrender.com/api/events?limit=100");
+    const data = await res.json();
+    
     tbody.innerHTML = "";
 
+    // Sort newest to oldest
+    const events = data.events.sort((a, b) => b.blockNumber - a.blockNumber);
+
     events.forEach(e => {
-      // Filter Logic
-      if (filterVal && e.tag !== filterVal) return;
-
       const tr = document.createElement("tr");
-      
-      // Determine if this is a correction/void
-      const isModified = e.eventType.includes("VOID") || e.eventType.includes("CORRECT");
-      if (isModified) tr.className = "hl";
 
-      // Build the row with exactly 11 cells
+      // We precisely map the 11 columns here
       tr.innerHTML = `
-        <td class="mono">${e.blockNumber ?? "—"}</td>
-        <td class="mono" title="${e.blockHash}">${(e.blockHash || "").substring(0,8)}...</td>
-        <td class="mono" title="${e.prevHash}">${(e.prevHash || "").substring(0,8)}...</td>
-        <td class="mono">${e.eventId || "—"}</td>
-        <td><span class="pill ${isModified ? 'bad' : 'good'}">${e.eventType}</span></td>
-        <td class="muted">${new Date(e.at).toLocaleString()}</td>
-        <td>${e.role || "—"}</td>
-        <td>${e.submittedBy || e.role || "—"}</td>
-        <td class="ccia-cell">${e.tag || "MISSING"}</td>
-        <td><pre>${JSON.stringify(e.payload || {}, null, 2)}</pre></td>
-        <td>
-          <button style="font-size: 10px; cursor: pointer;" onclick="copyId('${e.eventId}')">Copy ID</button>
-        </td>
+        <td class="mono">${e.blockNumber ?? ""}</td>
+        <td class="mono">${(e.blockHash || "0x00...").substring(0,8)}...</td>
+        <td class="mono">${(e.prevHash || "0x00...").substring(0,8)}...</td>
+        <td class="mono">${e.eventId || "N/A"}</td>
+        <td><span class="pill">${e.eventType}</span></td>
+        <td>${new Date(e.at).toLocaleString()}</td>
+        <td>${e.role || ""}</td>
+        <td class="mono" title="${e.submittedBy}">${(e.submittedBy || "").substring(0,8)}...</td>
+        <td class="tag-highlight">${e.tag || "MISSING"}</td>
+        <td><pre>${JSON.stringify(e.payload, null, 2)}</pre></td>
+        <td><button onclick="alert('Block: ${e.blockNumber}')">View</button></td>
       `;
       tbody.appendChild(tr);
     });
 
-    status.textContent = `Last updated: ${new Date().toLocaleTimeString()} | Records: ${events.length}`;
+    status.innerText = "Success: " + events.length + " events loaded.";
   } catch (err) {
-    status.textContent = "Error: Could not reach Ledger API.";
+    status.innerText = "Error loading data.";
     console.error(err);
   }
 }
 
-function clearFilter() {
-  document.getElementById("tagFilter").value = "";
-  loadData();
-}
-
-function copyId(id) {
-  navigator.clipboard.writeText(id);
-  alert("Event ID copied to clipboard");
-}
-
-// Auto-run on load
-loadData();
-// Refresh every 30 seconds
-setInterval(loadData, 30000);
+// Start
+loadLedger();
 </script>
 
 </body>
