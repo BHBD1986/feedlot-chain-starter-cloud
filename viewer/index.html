@@ -4,140 +4,131 @@
   <meta charset="UTF-8" />
   <title>Feedlot Ledger Viewer</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 20px; max-width: 1600px; }
+    body { font-family: Arial, sans-serif; margin: 20px; max-width: 1600px; background-color: #f9f9f9; }
     input, select, button { padding: 6px; margin: 4px; }
-    .row { display:flex; flex-wrap:wrap; gap:12px; align-items:center; }
-    .box { border: 1px solid #ddd; padding: 12px; border-radius: 10px; margin: 12px 0; }
-    table { border-collapse: collapse; width: 100%; margin-top: 12px; table-layout: fixed; }
-    th, td { border: 1px solid #ccc; padding: 8px; vertical-align: top; overflow: hidden; text-overflow: ellipsis; }
-    th { background: #eee; text-align: left; font-size: 12px; text-transform: uppercase; }
-    pre { margin: 0; white-space: pre-wrap; word-break: break-all; font-size: 11px; }
-    .muted { color:#666; }
-    .pill { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; border:1px solid #ddd; background:#fafafa; }
+    .box { border: 1px solid #ddd; padding: 15px; border-radius: 10px; margin-bottom: 20px; background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    
+    /* Table Styling */
+    table { border-collapse: collapse; width: 100%; background: white; }
+    th, td { border: 1px solid #ccc; padding: 10px; vertical-align: top; font-size: 13px; }
+    th { background: #f2f2f2; text-align: left; position: sticky; top: 0; z-index: 10; }
+    
+    /* Specific Column Highlight for CCIA Tag */
+    .ccia-header { background-color: #007bff !important; color: white; }
+    .ccia-cell { background-color: #eef7ff; font-weight: bold; border-left: 2px solid #007bff; border-right: 2px solid #007bff; color: #0056b3; }
+
+    .mono { font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace; font-size: 11px; color: #444; }
+    .pill { display:inline-block; padding:2px 8px; border-radius:12px; font-size:11px; font-weight: bold; border:1px solid #ddd; }
     .pill.bad { border-color:#f1c7c7; background:#fff5f5; color: #a33; }
     .pill.good { border-color:#c7f1d3; background:#f3fff6; color: #2a7; }
-    .warn { color:#a33; font-weight:600; }
-    .ok { color:#2a7; font-weight:600; }
-    .mono { font-family: "Courier New", monospace; font-size: 11px; }
-    .small { font-size: 12px; }
-    .right { margin-left:auto; }
-    .btn { cursor:pointer; background: #f0f0f0; border: 1px solid #ccc; border-radius: 4px; }
-    .btn:hover { background: #e0e0e0; }
-    .hl { background:#fffef0; }
-    /* CCIA Tag Styling */
-    .tag-cell { background-color: #e8f4ff; font-weight: bold; border-left: 3px solid #007bff !important; }
+    pre { margin: 0; white-space: pre-wrap; word-break: break-all; background: #fafafa; padding: 5px; border-radius: 4px; border: 1px solid #eee; }
+    .hl { background-color: #fff9e6; } /* Highlight for voided/corrected */
+    .muted { color: #777; font-size: 12px; }
   </style>
 </head>
 <body>
 
 <h2>Feedlot Ledger – Event Viewer</h2>
-<div class="muted">Live append-only blockchain ledger for CCIA cattle tracking.</div>
 
 <div class="box">
-  <div class="row">
-    <div class="rowline">
+  <div style="display: flex; justify-content: space-between; align-items: center;">
+    <div>
       <label><b>CCIA Tag Filter:</b></label>
-      <input id="tag" size="26" placeholder="Enter Tag #" />
-      <button class="btn" onclick="loadEvents()">Filter</button>
-      <button class="btn" onclick="loadAll()">View All</button>
+      <input id="tagFilter" size="25" placeholder="Search Tag..." />
+      <button onclick="loadData()">Apply Filter</button>
+      <button onclick="clearFilter()">Show All</button>
     </div>
-    <div class="rowline right">
-      <button class="btn" onclick="checkStatus()">Refresh Status</button>
-      <span id="statusOut" class="small muted"></span>
-    </div>
+    <div id="status" class="muted">Connecting to ledger...</div>
   </div>
 </div>
 
-<table id="events">
-<thead>
-  <tr>
-    <th style="width: 60px;">Block #</th>
-    <th style="width: 100px;">Block Hash</th>
-    <th style="width: 100px;">Prev Hash</th>
-    <th style="width: 150px;">Event ID</th>
-    <th style="width: 140px;">Type</th>
-    <th style="width: 160px;">Timestamp</th>
-    <th style="width: 80px;">Role</th>
-    <th style="width: 110px;">Submitted By</th>
-    <th style="width: 150px;" class="tag-cell">CCIA Tag</th>
-    <th>Payload</th>
-    <th style="width: 80px;">Actions</th>
-  </tr>
-</thead>
-  <tbody></tbody>
+<table id="ledgerTable">
+  <thead>
+    <tr>
+      <th style="width: 70px;">Block #</th>
+      <th style="width: 100px;">Block Hash</th>
+      <th style="width: 100px;">Prev Hash</th>
+      <th style="width: 150px;">Event ID</th>
+      <th style="width: 130px;">Type</th>
+      <th style="width: 160px;">Timestamp</th>
+      <th style="width: 90px;">Role</th>
+      <th style="width: 120px;">Submitted By</th>
+      <th style="width: 160px;" class="ccia-header">CCIA Tag</th>
+      <th>Payload</th>
+      <th style="width: 80px;">Actions</th>
+    </tr>
+  </thead>
+  <tbody id="ledgerBody">
+    </tbody>
 </table>
 
 <script>
-const API_BASE = "https://feedlot-chain-starter-cloud-1.onrender.com";
+const API_URL = "https://feedlot-chain-starter-cloud-1.onrender.com/api/events?limit=300";
 
-function shortHash(h) {
-  if (!h) return "000000...";
-  return h.length <= 10 ? h : (h.slice(0, 8) + "...");
-}
-
-async function checkStatus() {
-  const out = document.getElementById("statusOut");
+async function loadData() {
+  const filterVal = document.getElementById("tagFilter").value.trim();
+  const tbody = document.getElementById("ledgerBody");
+  const status = document.getElementById("status");
+  
   try {
-    const res = await fetch(`${API_BASE}/api/status`);
-    const data = await res.json();
-    out.textContent = `Node Online | Height: ${data.latestBlock ?? 0}`;
-    out.className = "small ok";
-  } catch (e) {
-    out.textContent = "Node Connection Error";
-    out.className = "small warn";
-  }
-}
-
-async function loadEvents() {
-  const tagFilter = document.getElementById("tag").value.trim();
-  const tbody = document.querySelector("#events tbody");
-  tbody.innerHTML = "<tr><td colspan='11'>Loading ledger data...</td></tr>";
-
-  try {
-    const res = await fetch(`${API_BASE}/api/events?limit=500`);
-    const data = await res.json();
-    const events = data.events || [];
+    const response = await fetch(API_URL);
+    const result = await response.json();
     
-    tbody.innerHTML = "";
-    // Reverse to show newest at the top
-    const list = [...events].reverse();
+    if (!result.ok) throw new Error("API Error");
 
-    list.forEach(e => {
-      if (tagFilter && e.tag !== tagFilter) return;
+    const events = result.events.reverse(); // Newest first
+    tbody.innerHTML = "";
+
+    events.forEach(e => {
+      // Filter Logic
+      if (filterVal && e.tag !== filterVal) return;
 
       const tr = document.createElement("tr");
-      if (e.eventType.includes("VOIDED") || e.eventType.includes("CORRECTED")) tr.classList.add("hl");
+      
+      // Determine if this is a correction/void
+      const isModified = e.eventType.includes("VOID") || e.eventType.includes("CORRECT");
+      if (isModified) tr.className = "hl";
 
+      // Build the row with exactly 11 cells
       tr.innerHTML = `
-        <td class="mono">${e.blockNumber ?? ""}</td>
-        <td class="mono" title="${e.blockHash}">${shortHash(e.blockHash)}</td>
-        <td class="mono" title="${e.prevHash}">${shortHash(e.prevHash)}</td>
-        <td class="mono">${e.eventId || ""}</td>
-        <td><span class="${tr.classList.contains('hl') ? 'pill bad' : 'pill good'}">${e.eventType}</span></td>
-        <td class="small">${new Date(e.at).toLocaleString()}</td>
-        <td class="small">${e.role || ""}</td>
-        <td class="small">${e.submittedBy || ""}</td>
-        <td class="tag-cell">${e.tag || "N/A"}</td>
-        <td><pre>${JSON.stringify(e.payload, null, 2)}</pre></td>
+        <td class="mono">${e.blockNumber ?? "—"}</td>
+        <td class="mono" title="${e.blockHash}">${(e.blockHash || "").substring(0,8)}...</td>
+        <td class="mono" title="${e.prevHash}">${(e.prevHash || "").substring(0,8)}...</td>
+        <td class="mono">${e.eventId || "—"}</td>
+        <td><span class="pill ${isModified ? 'bad' : 'good'}">${e.eventType}</span></td>
+        <td class="muted">${new Date(e.at).toLocaleString()}</td>
+        <td>${e.role || "—"}</td>
+        <td>${e.submittedBy || e.role || "—"}</td>
+        <td class="ccia-cell">${e.tag || "MISSING"}</td>
+        <td><pre>${JSON.stringify(e.payload || {}, null, 2)}</pre></td>
         <td>
-          <button class="btn small" onclick="navigator.clipboard.writeText('${e.eventId}')">Copy ID</button>
+          <button style="font-size: 10px; cursor: pointer;" onclick="copyId('${e.eventId}')">Copy ID</button>
         </td>
       `;
       tbody.appendChild(tr);
     });
-  } catch (e) {
-    tbody.innerHTML = "<tr><td colspan='11' class='warn'>Error loading events from blockchain.</td></tr>";
+
+    status.textContent = `Last updated: ${new Date().toLocaleTimeString()} | Records: ${events.length}`;
+  } catch (err) {
+    status.textContent = "Error: Could not reach Ledger API.";
+    console.error(err);
   }
 }
 
-function loadAll() {
-  document.getElementById("tag").value = "";
-  loadEvents();
+function clearFilter() {
+  document.getElementById("tagFilter").value = "";
+  loadData();
 }
 
-// Initial Load
-checkStatus();
-loadEvents();
+function copyId(id) {
+  navigator.clipboard.writeText(id);
+  alert("Event ID copied to clipboard");
+}
+
+// Auto-run on load
+loadData();
+// Refresh every 30 seconds
+setInterval(loadData, 30000);
 </script>
 
 </body>
