@@ -241,7 +241,6 @@ function render(events, tagFilter) {
   const list = [...events].reverse();
 
   for (const e of list) {
-    // If a tag filter is active, skip records that don't match
     if (tagFilter && e.tag !== tagFilter) continue;
 
     const tr = document.createElement("tr");
@@ -250,10 +249,9 @@ function render(events, tagFilter) {
     const payloadPretty = JSON.stringify(e.payload ?? {}, null, 2);
     const submittedBy = e.submittedBy ?? e.role ?? "";
 
-    // Add the Tag cell here (ensure it matches the order of your <th>)
+    // FIXED: Added the missing <td> for the Tag so it matches the 11 headers
     tr.innerHTML = `
       <td class="mono small">${escapeHtml(e.blockNumber ?? "")}</td>
-      <td class="hl"><b>${escapeHtml(e.tag || "")}</b></td> 
       <td class="mono small" title="${escapeHtml(e.blockHash)}">${escapeHtml(shortHash(e.blockHash))}</td>
       <td class="mono small" title="${escapeHtml(e.prevHash)}">${escapeHtml(shortHash(e.prevHash))}</td>
       <td class="mono small">${escapeHtml(e.eventId || "")}</td>
@@ -261,6 +259,7 @@ function render(events, tagFilter) {
       <td class="small">${escapeHtml(new Date(e.at || Date.now()).toLocaleString())}</td>
       <td class="small">${escapeHtml(e.role || "")}</td>
       <td class="small">${escapeHtml(submittedBy)}</td>
+      <td class="hl"><b>${escapeHtml(e.tag || "N/A")}</b></td> 
       <td><pre class="small">${escapeHtml(payloadPretty)}</pre></td>
       <td class="small">
         <button class="btn" onclick="copyEventId('${escapeHtml(e.eventId || "")}')">ID</button>
