@@ -130,6 +130,8 @@
       <th style="width:190px;">Timestamp</th>
       <th style="width:110px;">Role</th>
       <th style="width:110px;">Submitted By</th>
+      <th style="width:110px;">Submitted By</th>
+      <th style="width:160px;">CCIA Tag</th>
       <th>Payload</th>
       <th style="width:140px;">Actions</th>
     </tr>
@@ -261,8 +263,11 @@ function render(events, tagFilter) {
       <td>${pillForType(e.eventType)}</td>
       <td class="small">${escapeHtml(new Date(e.at || Date.now()).toLocaleString())}</td>
       <td class="small">${escapeHtml(e.role || "")}</td>
-      <td class="small">${escapeHtml(submittedBy)}</td>
-      <td><pre class="small">${escapeHtml(payloadPretty)}</pre></td>
+     <td class="small">${escapeHtml(submittedBy)}</td>
+<td class="mono small" style="background:#e8f4ff; font-weight:bold; color:#007bff;">
+  ${escapeHtml(e.tag || "NOT FOUND")}
+</td>
+<td><pre class="small">${escapeHtml(payloadPretty)}</pre></td>
       <td class="small">
         <button class="btn" onclick="copyEventId('${escapeHtml(e.eventId || "")}')">Copy ID</button>
         <button class="btn" onclick="useAsCorrection('${escapeHtml(e.eventId || "")}','${escapeHtml(e.tag || "")}')">Use as ref</button>
