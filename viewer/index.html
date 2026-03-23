@@ -74,7 +74,7 @@ async function loadLedger() {
         <td>${new Date(e.at).toLocaleString()}</td>
         <td>${e.role || ""}</td>
         <td class="mono" title="${e.submittedBy}">${(e.submittedBy || "").substring(0,8)}...</td>
-        <td class="tag-highlight">${e.tag || "MISSING"}</td>
+        <td class="tag-highlight">${e.payload?.tag || e.tag || "MISSING"}</td>
         <td><pre>${JSON.stringify(e.payload, null, 2)}</pre></td>
         <td><button onclick="alert('Block: ${e.blockNumber}')">View</button></td>
       `;
